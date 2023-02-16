@@ -35,16 +35,22 @@ impl Filesystem for FuseHandler {
             parent,
             name.to_str().unwrap()
         );
+
+        // TODO: find a way to handle moved reply when handling errors
         self.handler.lookup(_req, parent, name, reply).unwrap();
     }
 
     fn open(&mut self, _req: &Request<'_>, _ino: u64, _flags: i32, reply: fuser::ReplyOpen) {
         log::debug!("open on ino {} ", _ino);
+
+        // TODO: find a way to handle moved reply when handling errors
         self.handler.open(_req, _ino, _flags, reply).unwrap();
     }
 
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
         log::debug!("getattr on ino {} ", ino);
+
+        // TODO: find a way to handle moved reply when handling errors
         self.handler.getattr(_req, ino, reply).unwrap();
     }
 
