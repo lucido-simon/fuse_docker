@@ -1,13 +1,17 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use bimap::BiMap;
 use fuser::Request;
+use tokio::runtime::Handle;
+use tokio::sync::Mutex;
 
 use crate::docker_strategy::parent_directories::ParentDirectories;
 use crate::fuse_handler::FileSystemStrategy;
 
 pub struct DockerStrategy {
     _bimap: BiMap<u64, String>,
+    docker: Arc<Mutex<super::Docker>>,
 }
 
 pub enum DockerError {
@@ -21,12 +25,31 @@ impl DockerStrategy {
             bimap.insert(x as u64, x.to_string());
         });
 
-        Self { _bimap: bimap }
+        let docker = super::Docker::new();
+
+        log::info!(target: "Docker", "DockerStrategy initialized");
+
+        Self {
+            _bimap: bimap,
+            docker: Arc::new(Mutex::new(docker)),
+        }
     }
 }
 
 impl FileSystemStrategy for DockerStrategy {
     fn init(&self) -> Result<(), libc::c_int> {
+        let docker = self.docker.blocking_lock();
+        Handle::current()
+            .block_on(docker.get_docker().ping())
+            .map_err(|e| {
+                log::error!("Failed to ping docker daemon: {}", e);
+                log::error!("Is the docker daemon running ?");
+                log::error!("Are you running as root ?");
+                libc::EACCES
+            })?;
+
+        log::info!(target: "Docker", "DockerStrategy initialized");
+
         Ok(())
     }
 
@@ -38,7 +61,8 @@ impl FileSystemStrategy for DockerStrategy {
         reply: fuser::ReplyEntry,
     ) -> Result<(), libc::c_int> {
         if let Ok(parent) = ParentDirectories::try_from(parent) {
-            parent.lookup(name, reply)
+            log::debug!("lookup: parent: {:?}, name: {:?}", parent, name);
+            Handle::current().block_on(parent.lookup(name, reply, self.docker.clone()))
         } else {
             reply.error(libc::ENOENT);
             Ok(())
@@ -80,7 +104,7 @@ impl FileSystemStrategy for DockerStrategy {
         reply: &mut fuser::ReplyDirectory,
     ) -> Result<(), libc::c_int> {
         if let Ok(parent) = ParentDirectories::try_from(ino) {
-            parent.read_dir(offset, reply)
+            Handle::current().block_on(parent.read_dir(offset, reply, self.docker.clone()))
         } else {
             Err(libc::ENOENT)
         }
