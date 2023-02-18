@@ -14,3 +14,5 @@ bimap = "0.6.2"
 bollard = "0.14.0"
 tokio = { version = "1.13.0", features = ["full"] }
 futures = "0.3.17"
+ctrlc = "3.2.0"
+sys-mount = "2.0.2"

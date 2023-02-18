@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use bimap::BiMap;
 use fuser::Request;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
@@ -10,7 +9,6 @@ use crate::docker_strategy::parent_directories::ParentDirectories;
 use crate::fuse_handler::FileSystemStrategy;
 
 pub struct DockerStrategy {
-    _bimap: BiMap<u64, String>,
     docker: Arc<Mutex<super::Docker>>,
 }
 
@@ -20,17 +18,11 @@ pub enum DockerError {
 
 impl DockerStrategy {
     pub fn new() -> Self {
-        let mut bimap = BiMap::new();
-        ParentDirectories::iterator().for_each(|x| {
-            bimap.insert(x as u64, x.to_string());
-        });
-
         let docker = super::Docker::new();
 
         log::info!(target: "Docker", "DockerStrategy initialized");
 
         Self {
-            _bimap: bimap,
             docker: Arc::new(Mutex::new(docker)),
         }
     }

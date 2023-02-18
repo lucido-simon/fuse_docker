@@ -93,7 +93,7 @@ impl ParentDirectories {
 
     pub(crate) fn attr(&self) -> FileAttr {
         match self {
-            ParentDirectories::Containers => self.containers_attr(),
+            ParentDirectories::Containers => self.containers_root_attr(),
             ParentDirectories::Images => unimplemented!(),
             ParentDirectories::Volumes => unimplemented!(),
             ParentDirectories::Networks => unimplemented!(),
@@ -108,7 +108,9 @@ impl ParentDirectories {
         docker: Arc<Mutex<super::Docker>>,
     ) -> Result<(), libc::c_int> {
         match self {
-            ParentDirectories::Containers => self.containers_read_dir(offset, reply, docker).await,
+            ParentDirectories::Containers => {
+                self.containers_root_read_dir(offset, reply, docker).await
+            }
             ParentDirectories::Images => unimplemented!(),
             ParentDirectories::Volumes => unimplemented!(),
             ParentDirectories::Networks => unimplemented!(),
@@ -123,7 +125,9 @@ impl ParentDirectories {
         docker: Arc<Mutex<super::Docker>>,
     ) -> Result<(), libc::c_int> {
         match self {
-            ParentDirectories::Containers => Self::containers_lookup(name, reply, docker).await,
+            ParentDirectories::Containers => {
+                Self::containers_root_lookup(name, reply, docker).await
+            }
             ParentDirectories::Images => unimplemented!(),
             ParentDirectories::Volumes => unimplemented!(),
             ParentDirectories::Networks => unimplemented!(),
@@ -131,7 +135,7 @@ impl ParentDirectories {
         }
     }
 
-    pub(crate) fn ino_from_docker_name(name: &str) -> u64 {
+    pub(crate) fn ino_from_docker_id(name: &str) -> u64 {
         let mut ino = 0;
         for c in name.chars().take(8) {
             ino = ino << 8;
@@ -140,7 +144,7 @@ impl ParentDirectories {
         ino
     }
 
-    pub(crate) fn docker_name_from_ino(ino: u64) -> String {
+    pub(crate) fn docker_id_from_ino(ino: u64) -> String {
         let mut name = String::new();
         for i in 0..8 {
             let c = (ino >> (8 * (7 - i))) as u8 as char;
@@ -159,8 +163,8 @@ mod tests {
     #[test]
     fn test_ino_from_docker_name_and_back_short_name() {
         let name = "test";
-        let ino = ParentDirectories::ino_from_docker_name(name);
-        let name_back = ParentDirectories::docker_name_from_ino(ino);
+        let ino = ParentDirectories::ino_from_docker_id(name);
+        let name_back = ParentDirectories::docker_id_from_ino(ino);
         println!("{} {}", name, name_back);
         assert_eq!(name, name_back.as_str());
     }
@@ -168,8 +172,8 @@ mod tests {
     #[test]
     fn test_ino_from_docker_name_and_back_long_name() {
         let name = "this_is_a_very_long_name_but_the_conversion_is_still_working";
-        let ino = ParentDirectories::ino_from_docker_name(name);
-        let name_back = ParentDirectories::docker_name_from_ino(ino);
+        let ino = ParentDirectories::ino_from_docker_id(name);
+        let name_back = ParentDirectories::docker_id_from_ino(ino);
         println!("{} {}", name, name_back);
         assert_eq!(
             name.chars().take(8).collect::<String>().as_str(),

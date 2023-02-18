@@ -9,10 +9,10 @@ use tokio::sync::Mutex;
 use crate::docker_strategy::parent_directories::ParentDirectories;
 
 impl ParentDirectories {
-    pub(crate) async fn containers_lookup(
+    pub(crate) async fn containers_root_lookup(
         name: &std::ffi::OsStr,
         reply: fuser::ReplyEntry,
-        docker: Arc<Mutex<super::Docker>>,
+        docker: Arc<Mutex<crate::docker_strategy::Docker>>,
     ) -> Result<(), libc::c_int> {
         let mut docker = docker.lock().await;
         if let Err(e) = docker.update_containers().await {
@@ -30,7 +30,7 @@ impl ParentDirectories {
             .get_containers()
             .into_iter()
             .filter(|container| {
-                if let Some(names) = &container.names {
+                if let Some(names) = &container.container.names {
                     names.iter().any(|name| container_name.starts_with(name))
                 } else {
                     false
@@ -56,7 +56,7 @@ impl ParentDirectories {
         }
     }
 
-    pub(crate) fn containers_attr(&self) -> FileAttr {
+    pub(crate) fn containers_root_attr(&self) -> FileAttr {
         FileAttr {
             ino: self.into(),
             size: 0,
@@ -76,11 +76,11 @@ impl ParentDirectories {
         }
     }
 
-    pub(crate) async fn containers_read_dir(
+    pub(crate) async fn containers_root_read_dir(
         &self,
         offset: i64,
         reply: &mut fuser::ReplyDirectory,
-        docker: Arc<Mutex<super::Docker>>,
+        docker: Arc<Mutex<crate::docker_strategy::Docker>>,
     ) -> Result<(), libc::c_int> {
         log::debug!("containers_read_dir(offset: {})", offset);
 
@@ -97,11 +97,16 @@ impl ParentDirectories {
 
         let containers = docker.get_containers();
 
-        containers.iter().for_each(|container| {
-            if let (Some(id), Some(names)) = (container.id.as_ref(), container.names.as_ref()) {
+        log::debug!("containers_read_dir: containers: {:?}", containers);
+
+        containers.into_iter().for_each(|container| {
+            if let (Some(id), Some(names)) = (
+                container.container.id.as_ref(),
+                container.container.names.as_ref(),
+            ) {
                 let name_string = names.first().unwrap();
 
-                entries.push((Self::ino_from_docker_name(id.as_str()), name_string))
+                entries.push((Self::ino_from_docker_id(id), name_string))
             }
         });
 
@@ -117,7 +122,7 @@ impl ParentDirectories {
 
     fn create_container_directory(container: &ContainerSummary, id: &String) -> FileAttr {
         FileAttr {
-            ino: Self::ino_from_docker_name(id.as_str()),
+            ino: Self::ino_from_docker_id(id),
             size: 0,
             blocks: 0,
             atime: UNIX_EPOCH, // 1970-01-01 00:00:00
