@@ -1,16 +1,17 @@
 use std::{collections::HashMap, time::Duration};
 
-use bollard::{container::ListContainersOptions, service::ContainerSummary};
+use bollard::container::ListContainersOptions;
 use tokio::{runtime::Handle, time::Instant};
 
-use crate::docker_strategy::{containers::Container, parent_directories::ParentDirectories};
+use crate::docker_strategy::containers::Container;
+
+use super::child_directories::child_directories::ChildDirectory;
 
 const TTL: Duration = Duration::from_secs(5);
 
-pub(crate) struct Docker {
+pub struct Docker {
     docker: bollard::Docker,
-    mappings: HashMap<u64, ParentDirectories>,
-    containers: Vec<Container>,
+    mappings: HashMap<u64, Box<dyn ChildDirectory>>,
     clock_since_last_update: Instant,
 }
 
@@ -26,7 +27,6 @@ impl Docker {
 
         let mut docker = Self {
             docker,
-            containers: Vec::<Container>::new(),
             clock_since_last_update: Instant::now(),
             mappings: HashMap::new(),
         };
@@ -40,9 +40,22 @@ impl Docker {
         docker
     }
 
+    pub fn get_child(&self, inode: u64) -> Option<&Box<dyn ChildDirectory>> {
+        self.mappings.get(&inode)
+
+        // .and_then(|child| {
+        //     if let Some(child) = child.downcast_ref::<Box<dyn ChildDirectory>>() {
+        //         log::debug!("Found child: {:?}", child);
+        //         Some(child)
+        //     } else {
+        //         log::debug!("No child: {:?}, {:?}", child, self.mappings);
+        //         None
+        //     }
+        // })
+    }
+
     async fn force_update_containers(&mut self) -> Result<(), bollard::errors::Error> {
-        self.containers = self
-            .docker
+        self.docker
             .list_containers(Some(ListContainersOptions::<String> {
                 all: true,
                 ..Default::default()
@@ -56,30 +69,11 @@ impl Docker {
                     false
                 }
             })
-            .map(|container| {
-                let names = container
-                    .names
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|name| name.trim_start_matches('/').to_string())
-                    .collect();
-
-                let inode = if let Some(id) = container.id.as_ref() {
-                    let inode = ParentDirectories::ino_from_docker_id(id);
-                    self.mappings.insert(inode, ParentDirectories::Containers);
-                    inode
-                } else {
-                    panic!("Container without id")
-                };
-                Container {
-                    ino: inode,
-                    container: ContainerSummary {
-                        names: Some(names),
-                        ..container
-                    },
-                }
-            })
-            .collect();
+            .for_each(|container_summary| {
+                let container = Container::new(container_summary);
+                let inode = container.get_ino();
+                self.mappings.insert(inode, Box::new(container));
+            });
 
         self.clock_since_last_update = Instant::now();
         Ok(())
@@ -93,8 +87,14 @@ impl Docker {
         self.force_update_containers().await
     }
 
-    pub fn get_containers(&self) -> &Vec<Container> {
-        &self.containers
+    pub fn get<T>(&self) -> Vec<&T>
+    where
+        T: ChildDirectory,
+    {
+        self.mappings
+            .values()
+            .filter_map(|child| child.as_any().downcast_ref::<T>())
+            .collect()
     }
 
     pub fn get_docker(&self) -> &bollard::Docker {

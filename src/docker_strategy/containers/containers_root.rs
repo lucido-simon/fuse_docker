@@ -6,7 +6,10 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-use crate::docker_strategy::parent_directories::ParentDirectories;
+use crate::docker_strategy::{
+    child_directories::child_directories::ChildDirectory, containers::Container,
+    parent_directories::ParentDirectories,
+};
 
 impl ParentDirectories {
     pub(crate) async fn containers_root_lookup(
@@ -26,30 +29,15 @@ impl ParentDirectories {
             return Ok(());
         };
 
-        let containers: Vec<&ContainerSummary> = docker
-            .get_containers()
+        let containers: Vec<&Container> = docker
+            .get::<Container>()
             .into_iter()
-            .filter(|container| {
-                if let Some(names) = &container.container.names {
-                    names.iter().any(|name| container_name.starts_with(name))
-                } else {
-                    false
-                }
-            })
+            .filter(|container| container.get_name().starts_with(container_name))
             .collect();
 
         if let Some(container) = containers.first() {
-            if let Some(id) = container.id.as_ref() {
-                reply.entry(
-                    &Duration::from_secs(1),
-                    &Self::create_container_directory(container, id),
-                    0,
-                );
-                Ok(())
-            } else {
-                reply.error(libc::ENOENT);
-                Ok(())
-            }
+            reply.entry(&Duration::from_secs(1), &container.getattr(), 0);
+            Ok(())
         } else {
             reply.error(libc::ENOENT);
             Ok(())
@@ -85,8 +73,8 @@ impl ParentDirectories {
         log::debug!("containers_read_dir(offset: {})", offset);
 
         let mut entries = vec![
-            (ParentDirectories::Containers as u64, "."),
-            (ParentDirectories::Root as u64, ".."),
+            (ParentDirectories::Containers as u64, String::from(".")),
+            (ParentDirectories::Root as u64, String::from("..")),
         ];
 
         let mut docker = docker.lock().await;
@@ -95,16 +83,15 @@ impl ParentDirectories {
             log::debug!("Failed to update containers, error: {}", error);
         }
 
-        let containers = docker.get_containers();
+        let containers = docker.get::<Container>();
 
         log::debug!("containers_read_dir: containers: {:?}", containers);
 
         containers.into_iter().for_each(|container| {
-            if let (Some(id), Some(names)) = (
-                container.container.id.as_ref(),
-                container.container.names.as_ref(),
-            ) {
-                let name_string = names.first().unwrap();
+            if let (Some(id), Some(names)) =
+                (container.container.id.as_ref(), &container.container.names)
+            {
+                let name_string = names.first().unwrap().to_owned();
 
                 entries.push((Self::ino_from_docker_id(id), name_string))
             }

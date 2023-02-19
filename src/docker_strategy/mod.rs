@@ -1,3 +1,4 @@
+pub mod child_directories;
 pub(crate) mod docker;
 pub mod docker_strategy;
 pub mod parent_directories;

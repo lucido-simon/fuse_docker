@@ -81,6 +81,9 @@ impl FileSystemStrategy for DockerStrategy {
         if let Ok(parent) = ParentDirectories::try_from(ino) {
             reply.attr(&Duration::from_secs(1), &parent.attr());
             Ok(())
+        } else if let Some(child) = self.docker.blocking_lock().get_child(ino) {
+            reply.attr(&Duration::from_secs(1), &child.getattr());
+            Ok(())
         } else {
             reply.error(libc::ENOENT);
             Ok(())
@@ -97,6 +100,8 @@ impl FileSystemStrategy for DockerStrategy {
     ) -> Result<(), libc::c_int> {
         if let Ok(parent) = ParentDirectories::try_from(ino) {
             Handle::current().block_on(parent.read_dir(offset, reply, self.docker.clone()))
+        } else if let Some(child) = self.docker.blocking_lock().get_child(ino) {
+            child.read_dir(offset, reply)
         } else {
             Err(libc::ENOENT)
         }
