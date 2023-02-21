@@ -143,41 +143,4 @@ impl ParentDirectories {
         }
         ino
     }
-
-    pub(crate) fn docker_id_from_ino(ino: u64) -> String {
-        let mut name = String::new();
-        for i in 0..8 {
-            let c = (ino >> (8 * (7 - i))) as u8 as char;
-            if c != '\0' {
-                name.push(c);
-            }
-        }
-        name
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ino_from_docker_name_and_back_short_name() {
-        let name = "test";
-        let ino = ParentDirectories::ino_from_docker_id(name);
-        let name_back = ParentDirectories::docker_id_from_ino(ino);
-        println!("{} {}", name, name_back);
-        assert_eq!(name, name_back.as_str());
-    }
-
-    #[test]
-    fn test_ino_from_docker_name_and_back_long_name() {
-        let name = "this_is_a_very_long_name_but_the_conversion_is_still_working";
-        let ino = ParentDirectories::ino_from_docker_id(name);
-        let name_back = ParentDirectories::docker_id_from_ino(ino);
-        println!("{} {}", name, name_back);
-        assert_eq!(
-            name.chars().take(8).collect::<String>().as_str(),
-            name_back.as_str()
-        );
-    }
 }

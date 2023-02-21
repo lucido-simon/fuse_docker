@@ -6,7 +6,7 @@ use crate::docker_strategy::{
 
 use fuser::FileAttr;
 
-pub trait ChildDirectory: Debug + Any + 'static {
+pub trait ChildDirectory: Debug + Any {
     fn as_any(&self) -> &dyn Any;
     fn get_ino(&self) -> u64;
     fn get_id(&self) -> &String;

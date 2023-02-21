@@ -1,4 +1,3 @@
-use bollard::service::ContainerSummary;
 use fuser::{FileAttr, FileType};
 use std::{
     sync::Arc,
@@ -105,25 +104,5 @@ impl ParentDirectories {
         }
 
         Ok(())
-    }
-
-    fn create_container_directory(container: &ContainerSummary, id: &String) -> FileAttr {
-        FileAttr {
-            ino: Self::ino_from_docker_id(id),
-            size: 0,
-            blocks: 0,
-            atime: UNIX_EPOCH, // 1970-01-01 00:00:00
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
-            kind: FileType::Directory,
-            perm: 0o777,
-            nlink: 1,
-            uid: 0,
-            gid: 0,
-            rdev: 0,
-            flags: 0,
-            blksize: 0,
-        }
     }
 }
